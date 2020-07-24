@@ -11,7 +11,7 @@ MAX_DEPTH = 20
 # - implement own link model instead of a manytomanyfield (Item.nodes), since .add() seems to be very slow
 # - OR drop the link table alltogether (Item.nodes), instead storing all children in a comma-separated string
 # X(FAIL): call subnodes directly with Node.objects.filter(parent=...), for faster is_leaf()
-# - add isleaf flag column, for much faster is_leaf() [not necessary if storing children string]
+# X determine leafnode from itemcount being not None, for much faster is_leaf() [not necessary if storing children string]
 # - MAYBE...add dot-separated path column as a way to get both traversal and easy access to parents?
 
 class QuadTree(models.Model):
@@ -24,7 +24,7 @@ class QuadTree(models.Model):
     root = models.ForeignKey('Node', on_delete=models.CASCADE, db_index=True, null=True)
 
     def create_root(self):
-        root = Node.objects.create(index=self, depth=0, xmin=self.xmin, ymin=self.ymin, xmax=self.xmax, ymax=self.ymax)
+        root = Node.objects.create(index=self, depth=0, item_count=0, xmin=self.xmin, ymin=self.ymin, xmax=self.xmax, ymax=self.ymax)
         self.root = root
 
 ##    def count(self):
@@ -115,11 +115,16 @@ class Item(models.Model):
     ymax = models.FloatField()
     nodes = models.ManyToManyField('Node', related_name='items')
 
+class ItemNodeLink(models.Model):
+    node = models.ForeignKey('Node', on_delete=models.CASCADE, related_name='links', db_index=True)
+    item = models.ForeignKey('Item', on_delete=models.CASCADE, related_name='links', db_index=True)
+
 class Node(models.Model):
     index = models.ForeignKey('QuadTree', on_delete=models.CASCADE, related_name='nodes')
-    parent = models.ForeignKey('Node', on_delete=models.CASCADE, related_name='nodes', db_index=True, null=True, blank=True)
+    parent = models.ForeignKey('Node', on_delete=models.CASCADE, related_name='child_nodes', db_index=True, null=True, blank=True)
     depth = models.IntegerField()
-    count = models.IntegerField(default=0)
+    #items = models.CharField(max_length=1000, null=True, blank=True)
+    item_count = models.IntegerField(default=0, null=True, blank=True) # None means branch, 0 means isleaf (default when creating new node)
     xmin = models.FloatField()
     ymin = models.FloatField()
     xmax = models.FloatField()
@@ -138,18 +143,22 @@ class Node(models.Model):
 ##            halfheight = (ymax-ymin)/2.0
 
     def subnodes(self):
+        return self.child_nodes.all().order_by('ymin', 'xmin')
         #return Node.objects.filter(parent=self.pk).order_by('ymin', 'xmin')
-        return self.nodes.all().order_by('ymin', 'xmin')
 
 ##    def items(self):
 ##        return self.itemsfilter(
 ##        return self._index.cur.execute('SELECT items.oid, items.* FROM items INNER JOIN (SELECT itemid FROM links WHERE nodeid = ?) AS nodeitems ON items.oid = nodeitems.itemid', (self.nodeid,) )
 
     def is_leaf(self):
-        #subnodes = Node.objects.filter(parent=self.pk).count()
-        subnodes = self.nodes.all().count()
-        if subnodes == 0:
+        if self.item_count is None:
+            return False
+        else:
             return True
+##        subnodes = Node.objects.filter(parent=self.pk).count()
+##        #subnodes = self.nodes.all().count()
+##        if subnodes == 0:
+##            return True
 
     def insert(self, item):
         #print 'insert',parent
@@ -163,7 +172,7 @@ class Node(models.Model):
                 pass#print 'add to leaf node',self.nodeid
             
             # test if should split
-            if self.count > self.index.max_items and self.depth < self.index.max_depth:
+            if self.item_count > self.index.max_items and self.depth < self.index.max_depth:
                 self.split()
 
         # elif has subnodes
@@ -205,10 +214,10 @@ class Node(models.Model):
         parent = self
         new_depth = self.depth + 1
         count = 0
-        subnodes = [Node(index=self.index, parent=parent, depth=new_depth, count=count, xmin=x1-quartwidth, ymin=y1-quartheight, xmax=x1+quartwidth, ymax=y1+quartheight),
-                     Node(index=self.index, parent=parent, depth=new_depth, count=count, xmin=x2-quartwidth, ymin=y1-quartheight, xmax=x2+quartwidth, ymax=y1+quartheight),
-                     Node(index=self.index, parent=parent, depth=new_depth, count=count, xmin=x1-quartwidth, ymin=y2-quartheight, xmax=x1+quartwidth, ymax=y2+quartheight),
-                     Node(index=self.index, parent=parent, depth=new_depth, count=count, xmin=x2-quartwidth, ymin=y2-quartheight, xmax=x2+quartwidth, ymax=y2+quartheight)]
+        subnodes = [Node(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x1-quartwidth, ymin=y1-quartheight, xmax=x1+quartwidth, ymax=y1+quartheight),
+                     Node(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x2-quartwidth, ymin=y1-quartheight, xmax=x2+quartwidth, ymax=y1+quartheight),
+                     Node(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x1-quartwidth, ymin=y2-quartheight, xmax=x1+quartwidth, ymax=y2+quartheight),
+                     Node(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x2-quartwidth, ymin=y2-quartheight, xmax=x2+quartwidth, ymax=y2+quartheight)]
         #Node.objects.bulk_create(subnodes)
         for node in subnodes:
             node.save()
@@ -219,13 +228,17 @@ class Node(models.Model):
 ##                passprint 'quad',node.nodeid, node.parent, node.depth
 
         # delete previous links to this node and reset node count
-        items = list(self.items.all()) # get items before deleting the links
+        links = list(self.links.all()) # get items before deleting the links
+        #items = list(self.items.all()) # get items before deleting the links
+        self.links.all().delete()
         #self.items.clear()
-        self.count = 0
+        self.item_count = None # setting to None makes it no longer a leaf node
         self.save()
 
         # update items so they link to the new subnodes
-        for item in items:
+        for link in links:
+        #for item in items:
+            item = link.item
             bbox = item.xmin,item.ymin,item.xmax,item.ymax
             quads = self.quadrants(bbox)
             for quad in quads:
@@ -238,7 +251,11 @@ class Node(models.Model):
 
     def add_item(self, item):
         # add link
-        self.items.add(item)
+        #self.items.add(item)
+        link = ItemNodeLink(item=item, node=self)
         # update count
-        self.count += 1
+        if self.item_count is None:
+            self.item_count = 1 # from 0 to 1
+        else:
+            self.item_count += 1
 
