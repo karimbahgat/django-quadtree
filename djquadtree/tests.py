@@ -18,7 +18,7 @@ class BasicTestCase(TestCase):
         print len(items)
 
         print 'building'
-        spindex = QuadTree(xmin=-180, ymin=-90, xmax=180, ymax=90)
+        spindex = QuadTree(xmin=-180, ymin=-90, xmax=180, ymax=90, max_items=50)
         spindex.save()
         if PROFILE:
             import cProfile

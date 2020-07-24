@@ -242,13 +242,13 @@ class Node(models.Model):
 
         # BULK: update items so they link to the new subnodes
         # group items by quad/subnode
-        quaditems = {0:[], 1:[], 2:[], 3:[]}
+        quaditems = {1:[], 2:[], 3:[], 4:[]}
         for item in items:
             #print('adding into subquads',item)
             bbox = item.xmin,item.ymin,item.xmax,item.ymax
             quads = self.quadrants(bbox)
             for quad in quads:
-                quaditems[quad-1].append(item)
+                quaditems[quad].append(item)
         # for each quad/subnode, bulk insert new links and update count
         for quad,quaditems in quaditems.items():
             #print('link to new subnodes',quad,len(quaditems))
