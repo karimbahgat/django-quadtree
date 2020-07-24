@@ -16,6 +16,7 @@ MAX_DEPTH = 20
 
 # - MAYBE, make all leaf nodes in-memory pyqtrees, only add branch nodes every time it splits (ie no need to constantly edit node counts and links, only at the end)...
 # - MAYBE, allow items to be stored at any level, eg if they span multiple quads (ie items belong to only one node, no need for slow links)...
+# - MAYBE, do everything with .raw() sql calls
 
 class QuadTree(models.Model):
     xmin = models.FloatField()
@@ -239,18 +240,35 @@ class Node(models.Model):
         self.item_count = None # setting to None makes it no longer a leaf node
         self.save(update_fields=['item_count'])
 
-        # update items so they link to the new subnodes
+        # BULK: update items so they link to the new subnodes
+        # group items by quad/subnode
+        quaditems = {0:[], 1:[], 2:[], 3:[]}
         for item in items:
             #print('adding into subquads',item)
             bbox = item.xmin,item.ymin,item.xmax,item.ymax
             quads = self.quadrants(bbox)
             for quad in quads:
-                newnode = subnodes[quad-1]
-                newnode.add_item(item)
+                quaditems[quad-1].append(item)
+        # for each quad/subnode, bulk insert new links and update count
+        for quad,quaditems in quaditems.items():
+            #print('link to new subnodes',quad,len(quaditems))
+            newnode = subnodes[quad-1]
+            newlinks = [ItemNodeLink(item=item, node=newnode) for item in quaditems]
+            ItemNodeLink.objects.bulk_create(newlinks)
+            newnode.item_count = len(newlinks)
+            newnode.save(update_fields=['item_count'])
 
-        #Node.objects.bulk_update(subnodes)
-        for node in subnodes:
-            node.save(update_fields=['item_count'])
+        # ONE-BY-ONE SLOW: update items so they link to the new subnodes
+##        for item in items:
+##            #print('adding into subquads',item)
+##            bbox = item.xmin,item.ymin,item.xmax,item.ymax
+##            quads = self.quadrants(bbox)
+##            for quad in quads:
+##                newnode = subnodes[quad-1]
+##                newnode.add_item(item)
+##        #Node.objects.bulk_update(subnodes)
+##        for node in subnodes:
+##            node.save(update_fields=['item_count'])
 
     def add_item(self, item):
         # add link
