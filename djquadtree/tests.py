@@ -1,5 +1,5 @@
 from django.test import TestCase
-from djquadtree.models import QuadTree
+from djquadtree.models import QuadTree, Node, Item, ItemNodeLink
 
 # Create your tests here.
 class BasicTestCase(TestCase):
@@ -13,7 +13,8 @@ class BasicTestCase(TestCase):
         print 'loading'
         d = pg.VectorData(r"C:\Users\kimok\Downloads\ne_10m_admin_1_states_provinces (1)\ne_10m_admin_1_states_provinces.shp")
         #d = pg.VectorData(r"C:\Users\kimok\Desktop\BIGDATA\gazetteer data\raw\global_settlement_points_v1.01.shp", encoding='latin')
-        items = [(f.id, f.bbox) for f in d][:100] # items = [(i+1, f.bbox) for i,f in enumerate(d)]
+        d = d.select(lambda f: f.id < 100)
+        items = [(f.id, f.bbox) for f in d] # items = [(i+1, f.bbox) for i,f in enumerate(d)]
         print len(items)
 
         print 'building'
@@ -28,16 +29,20 @@ class BasicTestCase(TestCase):
             print prof.print_stats('cumtime')
             #fdsdfd
 
-        print 'intersecting'
-        testbox = (100,15,105,20) #(100,1,120,20)
-        if PROFILE:
-            import cProfile
-            prof = cProfile.Profile()
-            prof.enable()
-        matches = spindex.intersect(testbox)
-        if PROFILE:
-            print prof.print_stats('cumtime')
-            #fdsdfd
+        print 'items',Item.objects.all().count()
+        print 'nodes',Node.objects.all().count()
+        print 'links',ItemNodeLink.objects.all().count()
+
+##        print 'intersecting'
+##        testbox = (100,15,105,20) #(100,1,120,20)
+##        if PROFILE:
+##            import cProfile
+##            prof = cProfile.Profile()
+##            prof.enable()
+##        matches = spindex.intersect(testbox)
+##        if PROFILE:
+##            print prof.print_stats('cumtime')
+##            #fdsdfd
 
         print 'visualizing'
 ##        m = pg.renderer.Map()
@@ -91,9 +96,11 @@ class BasicTestCase(TestCase):
 ##            x1,y1,x2,y2 = node.xmin,node.ymin,node.xmax,node.ymax
 ##            box = {'type':'Polygon', 'coordinates':[[(x1,y1),(x1,y2),(x2,y2),(x2,y1)]]}
 ##            items.add_feature([parent,item], box)
+
+        print(quads)
             
         m = pg.renderer.Map()
-        #m.add_layer(d, fillcolor='red')
+        m.add_layer(d, fillcolor='red')
         #m.add_layer(items, fillcolor=None, outlinecolor='blue')
         m.add_layer(quads, fillcolor=None, outlinecolor='green',
                     ) #text=lambda f: f['nodeid'], textoptions={'textcolor':'green','textsize':6})
