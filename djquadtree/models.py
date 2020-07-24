@@ -50,20 +50,19 @@ class QuadTree(models.Model):
 ##                    i += chunksize
 ##                else:
 ##                    break
-##        print('begin chunking')
+##        #print('begin chunking')
 ##        for chunk in iterchunks():
-##            print('chunk create')
+##            #print('chunk create')
 ##            Item.objects.bulk_create(chunk)
 ##
 ##        # then insert them into the tree
-##        print('insert')
+##        #print('insert')
 ##        for item in Item.objects.all():
 ##            self.root.insert(item)
 
         # simpler approach
         for item_id,bbox in items:
-            item = Item(item_id=item_id, xmin=bbox[1], ymin=bbox[1], xmax=bbox[2], ymax=bbox[3])
-            item.save()
+            item = Item.objects.create(item_id=item_id, xmin=bbox[1], ymin=bbox[1], xmax=bbox[2], ymax=bbox[3])
             self.root.insert(item)
 
     def intersect(self, bbox):
@@ -215,13 +214,13 @@ class Node(models.Model):
         parent = self
         new_depth = self.depth + 1
         count = 0
-        subnodes = [Node(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x1-quartwidth, ymin=y1-quartheight, xmax=x1+quartwidth, ymax=y1+quartheight),
-                     Node(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x2-quartwidth, ymin=y1-quartheight, xmax=x2+quartwidth, ymax=y1+quartheight),
-                     Node(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x1-quartwidth, ymin=y2-quartheight, xmax=x1+quartwidth, ymax=y2+quartheight),
-                     Node(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x2-quartwidth, ymin=y2-quartheight, xmax=x2+quartwidth, ymax=y2+quartheight)]
+        subnodes = [Node.objects.create(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x1-quartwidth, ymin=y1-quartheight, xmax=x1+quartwidth, ymax=y1+quartheight),
+                     Node.objects.create(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x2-quartwidth, ymin=y1-quartheight, xmax=x2+quartwidth, ymax=y1+quartheight),
+                     Node.objects.create(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x1-quartwidth, ymin=y2-quartheight, xmax=x1+quartwidth, ymax=y2+quartheight),
+                     Node.objects.create(index=self.index, parent=parent, depth=new_depth, item_count=count, xmin=x2-quartwidth, ymin=y2-quartheight, xmax=x2+quartwidth, ymax=y2+quartheight)]
         #Node.objects.bulk_create(subnodes)
-        for node in subnodes:
-            node.save()
+        #for node in subnodes:
+        #    node.save()
 
 ##        if DEBUG:
 ##            print 'split',self.nodeid
