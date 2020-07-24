@@ -13,7 +13,7 @@ class BasicTestCase(TestCase):
         print 'loading'
         d = pg.VectorData(r"C:\Users\kimok\Downloads\ne_10m_admin_1_states_provinces (1)\ne_10m_admin_1_states_provinces.shp")
         #d = pg.VectorData(r"C:\Users\kimok\Desktop\BIGDATA\gazetteer data\raw\global_settlement_points_v1.01.shp", encoding='latin')
-        items = [(f.id, f.bbox) for f in d][:1000] # items = [(i+1, f.bbox) for i,f in enumerate(d)]
+        items = [(f.id, f.bbox) for f in d][:100] # items = [(i+1, f.bbox) for i,f in enumerate(d)]
         print len(items)
 
         print 'building'

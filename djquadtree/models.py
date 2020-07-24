@@ -115,9 +115,9 @@ class Item(models.Model):
     ymax = models.FloatField()
     nodes = models.ManyToManyField('Node', related_name='items')
 
-class ItemNodeLink(models.Model):
-    node = models.ForeignKey('Node', on_delete=models.CASCADE, related_name='links', db_index=True)
-    item = models.ForeignKey('Item', on_delete=models.CASCADE, related_name='links', db_index=True)
+##class ItemNodeLink(models.Model):
+##    node = models.ForeignKey('Node', on_delete=models.CASCADE, related_name='links', db_index=True)
+##    item = models.ForeignKey('Item', on_delete=models.CASCADE, related_name='links', db_index=True)
 
 class Node(models.Model):
     index = models.ForeignKey('QuadTree', on_delete=models.CASCADE, related_name='nodes')
@@ -167,6 +167,7 @@ class Node(models.Model):
         if self.is_leaf():
             # link item to the node itself
             self.add_item(item)
+            self.save()
 
             if DEBUG:
                 pass#print 'add to leaf node',self.nodeid
@@ -203,6 +204,7 @@ class Node(models.Model):
         return quads
 
     def split(self):
+        #print('split')
         quartwidth = self.halfwidth/2.0
         quartheight = self.halfheight/2.0
         x1 = self.center[0] - quartwidth
@@ -228,17 +230,18 @@ class Node(models.Model):
 ##                passprint 'quad',node.nodeid, node.parent, node.depth
 
         # delete previous links to this node and reset node count
-        links = list(self.links.all()) # get items before deleting the links
-        #items = list(self.items.all()) # get items before deleting the links
-        self.links.all().delete()
-        #self.items.clear()
+        #links = list(self.links.all()) # get items before deleting the links
+        items = list(self.items.all()) # get items before deleting the links
+        #self.links.all().delete()
+        self.items.clear()
         self.item_count = None # setting to None makes it no longer a leaf node
         self.save()
 
         # update items so they link to the new subnodes
-        for link in links:
-        #for item in items:
-            item = link.item
+        #for link in links:
+        for item in items:
+            #item = link.item
+            #print('adding into subquads',item)
             bbox = item.xmin,item.ymin,item.xmax,item.ymax
             quads = self.quadrants(bbox)
             for quad in quads:
@@ -251,8 +254,8 @@ class Node(models.Model):
 
     def add_item(self, item):
         # add link
-        #self.items.add(item)
-        link = ItemNodeLink(item=item, node=self)
+        self.items.add(item)
+        #link = ItemNodeLink(item=item, node=self)
         # update count
         if self.item_count is None:
             self.item_count = 1 # from 0 to 1
