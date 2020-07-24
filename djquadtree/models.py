@@ -8,11 +8,14 @@ MAX_ITEMS = 10
 MAX_DEPTH = 20
 
 # OPTIMIZATIONS
-# - implement own link model instead of a manytomanyfield (Item.nodes), since .add() seems to be very slow
-# - OR drop the link table alltogether (Item.nodes), instead storing all children in a comma-separated string
+# X implement own link model instead of a manytomanyfield (Item.nodes), since .add() seems to be very slow
+# - OR drop the link table alltogether (Item.nodes), instead storing all node items in a comma-separated string
 # X(FAIL): call subnodes directly with Node.objects.filter(parent=...), for faster is_leaf()
 # X determine leafnode from itemcount being not None, for much faster is_leaf() [not necessary if storing children string]
 # - MAYBE...add dot-separated path column as a way to get both traversal and easy access to parents?
+
+# - MAYBE, make all leaf nodes in-memory pyqtrees, only add branch nodes every time it splits (ie no need to constantly edit node counts and links, only at the end)...
+# - MAYBE, allow items to be stored at any level, eg if they span multiple quads (ie items belong to only one node, no need for slow links)...
 
 class QuadTree(models.Model):
     xmin = models.FloatField()
@@ -43,7 +46,7 @@ class QuadTree(models.Model):
 ##        def iterchunks():
 ##            i = 0
 ##            while True:
-##                chunk = [Item(item_id=item_id, xmin=bbox[1], ymin=bbox[1], xmax=bbox[2], ymax=bbox[3])
+##                chunk = [Item(item_id=item_id, xmin=bbox[0], ymin=bbox[1], xmax=bbox[2], ymax=bbox[3])
 ##                         for item_id,bbox in islice(items, i, i+chunksize)]
 ##                if len(chunk):
 ##                    yield chunk
@@ -62,7 +65,7 @@ class QuadTree(models.Model):
 
         # simpler approach
         for item_id,bbox in items:
-            item = Item.objects.create(item_id=item_id, xmin=bbox[1], ymin=bbox[1], xmax=bbox[2], ymax=bbox[3])
+            item = Item.objects.create(item_id=item_id, xmin=bbox[0], ymin=bbox[1], xmax=bbox[2], ymax=bbox[3])
             self.root.insert(item)
 
     def intersect(self, bbox):

@@ -91,17 +91,17 @@ class BasicTestCase(TestCase):
             x1,y1,x2,y2 = node.xmin,node.ymin,node.xmax,node.ymax
             box = {'type':'Polygon', 'coordinates':[[(x1,y1),(x1,y2),(x2,y2),(x2,y1)]]}
             quads.add_feature([node.pk,node.parent,node.depth,node.item_count], box)
-##        items = pg.VectorData(fields=['parent','item'])
-##        for row in spindex.nodes.items.all():
-##            x1,y1,x2,y2 = node.xmin,node.ymin,node.xmax,node.ymax
-##            box = {'type':'Polygon', 'coordinates':[[(x1,y1),(x1,y2),(x2,y2),(x2,y1)]]}
-##            items.add_feature([parent,item], box)
+        items = pg.VectorData(fields=['item'])
+        for item in Item.objects.all():
+            x1,y1,x2,y2 = item.xmin,item.ymin,item.xmax,item.ymax
+            box = {'type':'Polygon', 'coordinates':[[(x1,y1),(x1,y2),(x2,y2),(x2,y1)]]}
+            items.add_feature([item], box)
 
         print(quads)
             
         m = pg.renderer.Map()
         m.add_layer(d, fillcolor='red')
-        #m.add_layer(items, fillcolor=None, outlinecolor='blue')
+        m.add_layer(items, fillcolor=None, outlinecolor='blue')
         m.add_layer(quads, fillcolor=None, outlinecolor='green',
                     ) #text=lambda f: f['nodeid'], textoptions={'textcolor':'green','textsize':6})
         m.render_all()
