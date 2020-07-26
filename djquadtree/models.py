@@ -79,7 +79,7 @@ class QuadTree(models.Model):
         #res = connection.cursor().execute('''
         res = Item.objects.raw('''
                         WITH nodes AS
-                            (SELECT * FROM {nodes_table} WHERE "index" = {index}),
+                            (SELECT * FROM {nodes_table} WHERE index_id = {index}),
                         traversal AS
                           (SELECT id AS nodeid, depth, CAST(id AS text) AS path
                            FROM nodes
@@ -98,7 +98,7 @@ class QuadTree(models.Model):
                             WHERE links.node_id = traversal.nodeid)
 
                        -- Extract
-                       SELECT items.id, items.item_id, items.xmin, items.ymin, items.xmax, items.ymax
+                       SELECT items.id AS id, items.item_id, items.xmin, items.ymin, items.xmax, items.ymax
                        FROM {items_table} AS items
                        INNER JOIN travlinks ON items.id = travlinks.item_id
                        WHERE {boundscheck}
@@ -106,8 +106,10 @@ class QuadTree(models.Model):
                                    index=self.pk,
                                    nodes_table=Node._meta.db_table,
                                    items_table=Item._meta.db_table,
-                                   links_table=Node.items.through._meta.db_table,
+                                   links_table=ItemNodeLink._meta.db_table,
                                    ))
+        #print 'len',len(res.fetchall())
+        #print res.query
         return res
 
 class Item(models.Model):
@@ -274,6 +276,13 @@ class Node(models.Model):
         # add link
         #self.items.add(item)
         ItemNodeLink.objects.create(item=item, node=self)
+##        from django.db import connection
+##        res = connection.cursor().execute('''
+##                                            insert into {table}
+##                                            values (null, %s, %s)
+##                                        '''.format(table=ItemNodeLink._meta.db_table),
+##                                          (item.pk, self.pk),
+##                                          )
         # update count
         if self.item_count is None:
             self.item_count = 1 # from 0 to 1
