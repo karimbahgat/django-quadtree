@@ -1,6 +1,8 @@
 from django.db import models
 from itertools import islice
 
+from django.db import connection
+
 # Create your models here.
 
 DEBUG = False
@@ -123,6 +125,15 @@ class Item(models.Model):
 class ItemNodeLink(models.Model):
     node = models.ForeignKey('Node', on_delete=models.CASCADE, related_name='links', db_index=True)
     item = models.ForeignKey('Item', on_delete=models.CASCADE, related_name='links', db_index=True)
+
+    @staticmethod
+    def raw_create(node, item):
+        res = connection.cursor().execute('''
+                                            insert into {table}
+                                            values (null, %s, %s)
+                                        '''.format(table=ItemNodeLink._meta.db_table),
+                                          (item.pk, node.pk),
+                                          )
 
 class Node(models.Model):
     index = models.ForeignKey('QuadTree', on_delete=models.CASCADE, related_name='nodes')
@@ -275,17 +286,19 @@ class Node(models.Model):
     def add_item(self, item):
         # add link
         #self.items.add(item)
-        ItemNodeLink.objects.create(item=item, node=self)
-##        from django.db import connection
-##        res = connection.cursor().execute('''
-##                                            insert into {table}
-##                                            values (null, %s, %s)
-##                                        '''.format(table=ItemNodeLink._meta.db_table),
-##                                          (item.pk, self.pk),
-##                                          )
+        #ItemNodeLink.objects.create(item=item, node=self)
+        #ItemNodeLink.raw_create(item, self)
+        res = connection.cursor().execute('''
+                                            insert into {table}
+                                            values (null, %s, %s)
+                                        '''.format(table=ItemNodeLink._meta.db_table),
+                                          (item.pk, self.pk),
+                                          )
         # update count
         if self.item_count is None:
             self.item_count = 1 # from 0 to 1
         else:
             self.item_count += 1
+
+
 
