@@ -126,14 +126,24 @@ class ItemNodeLink(models.Model):
     node = models.ForeignKey('Node', on_delete=models.CASCADE, related_name='links', db_index=True)
     item = models.ForeignKey('Item', on_delete=models.CASCADE, related_name='links', db_index=True)
 
-    @staticmethod
-    def raw_create(node, item):
-        res = connection.cursor().execute('''
-                                            insert into {table}
-                                            values (null, %s, %s)
-                                        '''.format(table=ItemNodeLink._meta.db_table),
-                                          (item.pk, node.pk),
-                                          )
+##    @staticmethod
+##    def raw_create(node, item):
+##        res = connection.cursor().execute('''
+##                                            insert into {table}
+##                                            values (null, %s, %s)
+##                                        '''.format(table=ItemNodeLink._meta.db_table),
+##                                          (item.pk, node.pk),
+##                                          )
+
+##    @staticmethod
+##    def raw_bulk_create(node, items):
+##        nodeid = node.pk
+##        connection.cursor().executemany('''
+##                                            insert into {table} (node_id, item_id)
+##                                            values (?, ?)
+##                                        '''.format(table=ItemNodeLink._meta.db_table),
+##                                          [(nodeid, item.pk) for item in items],
+##                                          )
 
 class Node(models.Model):
     index = models.ForeignKey('QuadTree', on_delete=models.CASCADE, related_name='nodes')
@@ -158,12 +168,47 @@ class Node(models.Model):
 ##            halfheight = (ymax-ymin)/2.0
 
     def subnodes(self):
-        return self.child_nodes.all().order_by('ymin', 'xmin')
+        #return self.child_nodes.all().order_by('ymin', 'xmin')
         #return Node.objects.filter(parent=self.pk).order_by('ymin', 'xmin')
+        res = connection.cursor().execute('''
+                                            select id,index_id,parent_id,depth,item_count,xmin,ymin,xmax,ymax
+                                            from {table}
+                                            where parent_id = {nodeid}
+                                            order by ymin,xmin
+                                        '''.format(table=Node._meta.db_table, nodeid=self.pk),
+                                          )
+        res = [Node(*row) for row in res]
+        return res
 
-##    def items(self):
-##        return self.itemsfilter(
-##        return self._index.cur.execute('SELECT items.oid, items.* FROM items INNER JOIN (SELECT itemid FROM links WHERE nodeid = ?) AS nodeitems ON items.oid = nodeitems.itemid', (self.nodeid,) )
+    def getlinks(self):
+        #itemlinks = self.links.all() 
+        #itemlinks = ItemNodeLink.objects.filter(node=self)
+        res = connection.cursor().execute('''
+                                            select id,node_id,item_id
+                                            from {table}
+                                            where node_id = {nodeid}
+                                        '''.format(table=ItemNodeLink._meta.db_table, nodeid=self.pk),
+                                          )
+        itemlinks = [ItemNodeLink(*row) for row in res]
+        return itemlinks
+
+    def clearlinks(self):
+        connection.cursor().execute('''
+                                            delete from {table}
+                                            where node_id = {nodeid}
+                                        '''.format(table=ItemNodeLink._meta.db_table, nodeid=self.pk),
+                                          )
+
+    def getitems(self):
+        res = connection.cursor().execute('''SELECT items.id, items.xmin, items.ymin, items.xmax, items.ymax
+                                            FROM {itemtable} AS items
+                                            INNER JOIN {linktable} AS links
+                                            ON links.node_id = {nodeid}
+                                            AND items.id = links.item_id'''.format(itemtable=Item._meta.db_table,
+                                                                                  linktable=ItemNodeLink._meta.db_table,
+                                                                                  nodeid=self.pk,) )
+        items = [Item(*row) for row in res]
+        return items
 
     def is_leaf(self):
         if self.item_count is None:
@@ -245,9 +290,13 @@ class Node(models.Model):
 ##                passprint 'quad',node.nodeid, node.parent, node.depth
 
         # delete previous links to this node and reset node count
-        itemlinks = self.links.all() #ItemNodeLink.objects.filter(node=self)
-        items = [link.item for link in itemlinks] # get items before deleting the links
-        itemlinks.delete()
+        #itemlinks = ItemNodeLink.objects.filter(node=self)
+        #itemlinks = self.links.all()
+        #itemlinks = self.getlinks()
+        #items = [link.item for link in itemlinks] # get items before deleting the links
+        items = self.getitems()
+        #temlinks.delete()
+        self.clearlinks()
         #items = list(self.items.all()) # get items before deleting the links
         #self.items.clear()
         self.item_count = None # setting to None makes it no longer a leaf node
@@ -263,13 +312,16 @@ class Node(models.Model):
             for quad in quads:
                 quaditems[quad].append(item)
         # for each quad/subnode, bulk insert new links and update count
+        newlinks = []
         for quad,quaditems in quaditems.items():
             #print('link to new subnodes',quad,len(quaditems))
             newnode = subnodes[quad-1]
-            newlinks = [ItemNodeLink(item=item, node=newnode) for item in quaditems]
-            ItemNodeLink.objects.bulk_create(newlinks)
-            newnode.item_count = len(newlinks)
+            newlinks += [ItemNodeLink(item=item, node=newnode) for item in quaditems]
+            #ItemNodeLink.objects.bulk_create(newlinks)
+            #ItemNodeLink.raw_bulk_create(newnode, quaditems)
+            newnode.item_count = len(quaditems)
             newnode.save(update_fields=['item_count'])
+        ItemNodeLink.objects.bulk_create(newlinks)
 
         # ONE-BY-ONE SLOW: update items so they link to the new subnodes
 ##        for item in items:
@@ -289,8 +341,8 @@ class Node(models.Model):
         #ItemNodeLink.objects.create(item=item, node=self)
         #ItemNodeLink.raw_create(item, self)
         res = connection.cursor().execute('''
-                                            insert into {table}
-                                            values (null, %s, %s)
+                                            insert into {table} (item_id, node_id)
+                                            values (%s, %s)
                                         '''.format(table=ItemNodeLink._meta.db_table),
                                           (item.pk, self.pk),
                                           )
